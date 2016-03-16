@@ -114,7 +114,7 @@ module Local
     end
 
     case cmd
-    when 1
+    when 1 # connect
       send_data REPLY[:success]
       puts "#{cmd}: #{host}:#{port}"
       @conn = EventMachine.connect CONFIG['server'], CONFIG['server_port'], LocalConn
@@ -123,16 +123,35 @@ module Local
       @conn.send_enc_data @data.rest
       @data = nil
       Fiber.yield
-    when 2, 3 # bind, udp
-      # send_data "\x05\x00\x00\x01" + IPAddr.new(host).hton + [port].pack('n')
+    when 2 # bind
+      @port = alloc_port
+      if !port
+        panic REPLY[:general_failure]
+      end
+      # send local addr and TCP port
+      puts "#{cmd}: bind port #{@port}"
+
+      send_data "\x05\x00\x00\x01" + IPAddr.new(CONFIG['local']).hton + [@port].pack('n')
+      # wait local port connected
+      # send client connected addr and TCP port
+      send_data "\x05\x00\x00\x01" + IPAddr.new(client_addr).hton + [client_port].pack('n')
+
+    when 3 # udp associate
+      puts "#{cmd}: not supported"
       panic REPLY[:cmd_not_supported]
     else
+      puts "#{cmd}: not supported"
       panic REPLY[:cmd_not_supported]
     end
   end
 
   def wait n # bytes
     Fiber.yield until @data.rest_bytesize >= n
+  end
+
+  def self.alloc_port
+    @ports ||= [CONFIG['']]
+    @ports.empty?
   end
 
   def panic data
